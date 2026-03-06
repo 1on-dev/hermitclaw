@@ -137,6 +137,10 @@ def _derive_traits(seed_bytes: bytes) -> dict:
 
 def _collect_entropy() -> bytes:
     """Collect entropy from the user mashing their keyboard."""
+    if not sys.stdin.isatty():
+        print("  (headless mode — seeding genome from system entropy)")
+        return os.urandom(32)
+
     print("  Now seed its genome. What you type becomes its DNA —")
     print("  every character and its timing shapes who it becomes.")
     print("  Mash keys, type nonsense, slam the keyboard. Be random.")
@@ -249,9 +253,7 @@ def create_identity() -> dict:
     print("  A new HermitClaw is being born.")
     print("  ==============================")
     print()
-    name = input("  What will you name it? > ").strip()
-    if not name:
-        name = "Crab"
+    name = config["name"]
 
     # Set environment path to {name}_box/
     project_root = os.path.dirname(os.path.dirname(__file__))

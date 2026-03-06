@@ -22,6 +22,9 @@ logging.basicConfig(
 )
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
+# HERMIT_FOLDER env var lets Railway (or any container) point to a persistent
+# volume. Falls back to the project root so local dev is unchanged.
+SEARCH_ROOT = os.environ.get("HERMIT_FOLDER", PROJECT_ROOT)
 
 
 def _crab_id_from_box(box_path: str) -> str:
@@ -43,12 +46,12 @@ def _discover_crabs() -> dict[str, Brain]:
         with open(legacy_identity, "r") as f:
             identity = json.load(f)
         name = identity.get("name", "crab").lower()
-        new_path = os.path.join(PROJECT_ROOT, f"{name}_box")
+        new_path = os.path.join(SEARCH_ROOT, f"{name}_box")
         print(f"\n  Migrating environment/ -> {name}_box/...")
         shutil.move(legacy, new_path)
 
     # Scan for *_box/ directories
-    pattern = os.path.join(PROJECT_ROOT, "*_box")
+    pattern = os.path.join(SEARCH_ROOT, "*_box")
     boxes = sorted(p for p in glob.glob(pattern) if os.path.isdir(p))
 
     for box_path in boxes:
@@ -65,22 +68,24 @@ def _discover_crabs() -> dict[str, Brain]:
 if __name__ == "__main__":
     # Discover existing crabs
     brains = _discover_crabs()
+    interactive = sys.stdin.isatty()
 
     if brains:
         names = [b.identity["name"] for b in brains.values()]
         print(f"\n  Found {len(brains)} crab(s): {', '.join(names)}")
-        answer = input("  Create a new one? (y/N) > ").strip().lower()
-        if answer == "y":
-            identity = create_identity()
-            crab_id = identity["name"].lower()
-            box_path = os.path.join(PROJECT_ROOT, f"{crab_id}_box")
-            brain = Brain(identity, box_path)
-            brains[crab_id] = brain
+        if interactive:
+            answer = input("  Create a new one? (y/N) > ").strip().lower()
+            if answer == "y":
+                identity = create_identity()
+                crab_id = identity["name"].lower()
+                box_path = os.path.join(SEARCH_ROOT, f"{crab_id}_box")
+                brain = Brain(identity, box_path)
+                brains[crab_id] = brain
     else:
-        print("\n  No crabs found. Let's create one!")
+        print("\n  No crabs found. Creating one automatically...")
         identity = create_identity()
         crab_id = identity["name"].lower()
-        box_path = os.path.join(PROJECT_ROOT, f"{crab_id}_box")
+        box_path = os.path.join(SEARCH_ROOT, f"{crab_id}_box")
         brain = Brain(identity, box_path)
         brains[crab_id] = brain
 

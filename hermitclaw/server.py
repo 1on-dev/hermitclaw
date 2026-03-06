@@ -7,7 +7,7 @@ import logging
 import os
 import time
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -27,6 +27,13 @@ def create_app(all_brains: dict[str, Brain]) -> FastAPI:
     global brains
     brains = all_brains
     return app
+
+
+def _check_secret(x_secret: str | None = Header(None)):
+    """FastAPI dependency — requires X-Secret header when HERMITCLAW_SECRET is set."""
+    expected = config.get("secret")
+    if expected and x_secret != expected:
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
 
 def _get_brain(request: Request) -> Brain:
@@ -50,7 +57,11 @@ app.add_middleware(
 
 
 @app.websocket("/ws/{crab_id}")
-async def websocket_endpoint(ws: WebSocket, crab_id: str):
+async def websocket_endpoint(ws: WebSocket, crab_id: str, secret: str | None = None):
+    expected = config.get("secret")
+    if expected and secret != expected:
+        await ws.close(code=4001)
+        return
     brain = brains.get(crab_id)
     if not brain:
         await ws.close(code=4004)
@@ -67,8 +78,12 @@ async def websocket_endpoint(ws: WebSocket, crab_id: str):
 
 
 @app.websocket("/ws")
-async def websocket_default(ws: WebSocket):
+async def websocket_default(ws: WebSocket, secret: str | None = None):
     """Backwards-compatible /ws — connects to the first brain."""
+    expected = config.get("secret")
+    if expected and secret != expected:
+        await ws.close(code=4001)
+        return
     if not brains:
         await ws.close(code=4004)
         return
@@ -87,7 +102,7 @@ async def websocket_default(ws: WebSocket):
 # --- REST API ---
 
 
-@app.get("/api/crabs")
+@app.get("/api/crabs", dependencies=[Depends(_check_secret)])
 async def get_crabs():
     """List all running crabs."""
     return [
@@ -101,7 +116,7 @@ async def get_crabs():
     ]
 
 
-@app.post("/api/crabs")
+@app.post("/api/crabs", dependencies=[Depends(_check_secret)])
 async def create_crab(request: Request):
     """Create a new crab at runtime."""
     body = await request.json()
@@ -144,27 +159,27 @@ async def create_crab(request: Request):
     return {"ok": True, "id": crab_id, "name": name}
 
 
-@app.get("/api/identity")
+@app.get("/api/identity", dependencies=[Depends(_check_secret)])
 async def get_identity(request: Request):
     """Get the crab's identity."""
     brain = _get_brain(request)
     return brain.identity
 
 
-@app.get("/api/events")
+@app.get("/api/events", dependencies=[Depends(_check_secret)])
 async def get_events(request: Request, limit: int = 100):
     brain = _get_brain(request)
     return brain.events[-limit:]
 
 
-@app.get("/api/raw")
+@app.get("/api/raw", dependencies=[Depends(_check_secret)])
 async def get_raw(request: Request, limit: int = 20):
     """Get raw API call history."""
     brain = _get_brain(request)
     return brain.api_calls[-limit:]
 
 
-@app.get("/api/status")
+@app.get("/api/status", dependencies=[Depends(_check_secret)])
 async def get_status(request: Request):
     brain = _get_brain(request)
     return {
@@ -180,7 +195,7 @@ async def get_status(request: Request):
     }
 
 
-@app.post("/api/focus-mode")
+@app.post("/api/focus-mode", dependencies=[Depends(_check_secret)])
 async def post_focus_mode(request: Request):
     """Toggle focus mode on or off."""
     brain = _get_brain(request)
@@ -190,7 +205,7 @@ async def post_focus_mode(request: Request):
     return {"ok": True, "focus_mode": enabled}
 
 
-@app.post("/api/message")
+@app.post("/api/message", dependencies=[Depends(_check_secret)])
 async def post_message(request: Request):
     """Receive a message from the user (voice from outside the room)."""
     brain = _get_brain(request)
@@ -205,7 +220,7 @@ async def post_message(request: Request):
     return {"ok": True}
 
 
-@app.post("/api/snapshot")
+@app.post("/api/snapshot", dependencies=[Depends(_check_secret)])
 async def post_snapshot(request: Request):
     """Receive a canvas snapshot from the frontend."""
     brain = _get_brain(request)
@@ -214,7 +229,7 @@ async def post_snapshot(request: Request):
     return {"ok": True}
 
 
-@app.get("/api/files")
+@app.get("/api/files", dependencies=[Depends(_check_secret)])
 async def get_files(request: Request):
     brain = _get_brain(request)
     env_root = os.path.realpath(brain.env_path)
@@ -229,7 +244,7 @@ async def get_files(request: Request):
     return {"files": files}
 
 
-@app.get("/api/files/{path:path}")
+@app.get("/api/files/{path:path}", dependencies=[Depends(_check_secret)])
 async def get_file(request: Request, path: str):
     brain = _get_brain(request)
     env_root = os.path.realpath(brain.env_path)

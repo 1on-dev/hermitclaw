@@ -4,6 +4,7 @@ import os
 import yaml
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "config.yaml")
+CONFIG_LOCAL_PATH = os.path.join(os.path.dirname(__file__), "..", "config.local.yaml")
 
 # Known provider presets: provider_name -> default base_url
 PROVIDER_PRESETS = {
@@ -18,9 +19,24 @@ PROVIDER_KEY_ENV_VARS = {
 
 
 def load_config() -> dict:
-    """Load config from config.yaml, with env var overrides."""
+    """Load config from config.yaml, with env var overrides.
+
+    If config.local.yaml exists (gitignored), its values are merged on top —
+    use it for api_key and other secrets you don't want in version control.
+    """
     with open(CONFIG_PATH, "r") as f:
         config = yaml.safe_load(f)
+
+    if os.path.isfile(CONFIG_LOCAL_PATH):
+        with open(CONFIG_LOCAL_PATH, "r") as f:
+            local = yaml.safe_load(f) or {}
+        config.update(local)
+
+    # Crab name
+    config["name"] = os.environ.get("HERMITCLAW_NAME") or config.get("name", "Crab")
+
+    # API guard secret — if set, all /api/* requests must include X-Secret: <value>
+    config["secret"] = os.environ.get("HERMITCLAW_SECRET") or config.get("secret") or None
 
     # Provider (default: openai)
     config["provider"] = os.environ.get("HERMITCLAW_PROVIDER") or config.get(

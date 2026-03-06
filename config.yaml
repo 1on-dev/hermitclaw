@@ -1,7 +1,9 @@
 # HermitClaw Configuration
+name: "Lhek"                    # crab name — override with HERMITCLAW_NAME env var
 provider: "openai"              # "openai" | "openrouter" | "custom"
 model: "gpt-4.1"
-api_key: null                   # set here or via OPENAI_API_KEY / OPENROUTER_API_KEY env var
+api_key: null                   # set via OPENAI_API_KEY env var, or in config.local.yaml (gitignored)
+secret: null                    # API guard — set via HERMITCLAW_SECRET env var, or in config.local.yaml
 base_url: null                  # auto-set for known providers; required for "custom"
 ollama_api_key: null            # for Ollama cloud web search (minimax:cloud etc.) — OLLAMA_API_KEY env
 
